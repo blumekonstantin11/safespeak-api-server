@@ -1,10 +1,12 @@
 const bcrypt =require('bcrypt');
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
+
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer'); // Multer-Paket importieren
 const path = require('path');
+
 const cors = require('cors');
-// ...
 const app = express();
 
 // Fügen Sie DIESE ZEILE HINZU, um CORS für alle Anfragen zu aktivieren
