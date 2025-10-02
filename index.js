@@ -1,17 +1,11 @@
 const bcrypt =require('bcrypt');
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
-const https = require('https');
-const fs = require('fs');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer'); // Multer-Paket importieren
 const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
-const options = {
-    key: fs.readFileSync('key.pem'),
-    cert: fs.readFileSync('cert.pem')
-};
 
 app.use(express.json());
 app.use(express.static('.'));
@@ -182,7 +176,7 @@ app.get('/', (req, res) => {
     res.send('Willkommen auf dem SafeSpeak-Server! Die Datenbank ist eingerichtet.');
 });
 
-// Starte den HTTPS-Server
-https.createServer(options, app).listen(port, () => {
-    console.log(`Server läuft auf https://192.168.178.89:${port}`);
+// DIESEN BLOCK STATTDESSEN EINFÜGEN!
+app.listen(port, () => {
+    console.log(`Server läuft auf Port ${port}`);
 });
