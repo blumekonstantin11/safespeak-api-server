@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>SafeSpeak Server Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        form {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 5px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        textarea {
+            width: 95%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        #message-section {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #messages {
+            border: 1px solid #ddd;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: scroll;
+        }
+        
+        #messages p {
+            margin: 0 0 10px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        #messages p:last-child {
+            border-bottom: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #555;
+            background: #fff3cd;
+            padding: 10px;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: #ccc;
+            margin: 20px 0;
+        }
+        
+        /* Zusätzliche CSS-Regeln */
+        .password-container {
+            position: relative;
+            width: 85%;
+            margin-bottom: 10px;
+        }
+
+        .password-container input {
+            width: 100%;
+            padding-right: 40px;
+        }
+
+        .password-container .toggle-password {
+            position: absolute;
+            right: -90px;
+            top: 43%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2em;
+            padding: 0;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #loggedInUsername {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #3498db;
+            margin-right: auto;
+        }
+
+        /* Styling für den Schalter */
+        .theme-switch-wrapper {
+            display: flex;
+            align-items: center;
+            position: fixed;
+            top: 20px;
+            right: 30px;
+            z-index: 1000;
+        }
+
+        .theme-switch {
+            display: inline-block;
+            height: 34px;
+            position: relative;
+            width: 60px;
+        }
+
+        .theme-switch input {
+            display: none;
+        }
+
+        .slider {
+            background-color: #ccc;
+            bottom: 0;
+            cursor: pointer;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            transition: .4s;
+        }
+
+        .slider:before {
+            background-color: #fff;
+            bottom: 4px;
+            content: "";
+            height: 26px;
+            left: 4px;
+            position: absolute;
+            transition: .4s;
+            width: 26px;
+        }
+
+        input:checked+.slider {
+            background-color: #2196f3;
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(26px);
+        }
+
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        /* Styling für den dunklen Modus */
+        body.dark-mode {
+            background-color: #2c3e50;
+            color: #ecf0f1; 
+        }
+
+        .dark-mode .container {
+            background: #34495e;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .dark-mode h1, .dark-mode h2 {
+            color: #ecf0f1;
+            border-bottom: 2px solid #555;
+        }
+
+        /* ... andere dunkle Modus-Regeln ... */
+
+        .dark-mode #messages {
+            background: #3a536b; /* Dunklerer Hintergrund für Nachrichtenbox */
+            border: 1px solid #4a637d;
+        }
+
+        .dark-mode #messages p {
+            color: #ecf0f1; /* Helle Textfarbe für Nachrichten */
+            border-bottom: 1px solid #4a637d; /* Hellerer Trennstrich */
+        }
+
+        .dark-mode form {
+            background: #3a536b;
+        }
+
+        .dark-mode input[type="text"],
+        .dark-mode input[type="password"],
+        .dark-mode input[type="number"],
+        .dark-mode textarea {
+            background-color: #4a637d;
+            border: 1px solid #777;
+            color: #ecf0f1;
+        }
+
+        .dark-mode .status {
+            background: #3a536b;
+            border: 1px solid #4a637d;
+            color: #ecf0f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 id="loggedInUsername"></h2>
+            <img src="SafeSpeak.png" alt="SafeSpeak Logo" style="width: 200px; display: block; margin-left: auto; margin-right: 20px;">
+            <div class="theme-switch-wrapper">
+                <label class="theme-switch" for="checkbox">
+                    <input type="checkbox" id="checkbox" />
+                    <div class="slider round"></div>
+                </label>
+                <em>Dunkler Modus</em>
+            </div>
+        </div>
+        
+        <div id="auth-section">
+            <h2>Benutzer registrieren</h2>
+            <form id="registerForm">
+                <input type="text" id="regUsername" placeholder="Benutzername" required><br>
+                <div class="password-container">
+                    <input type="password" id="regPassword" placeholder="Passwort" required>
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPassword')">👁️</button>
+                </div>
+                <button type="submit">Registrieren</button>
+            </form>
+
+            <hr>
+
+            <h2>Benutzer anmelden</h2>
+            <form id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Benutzername" required><br>
+                <div class="password-container">
+                    <input type="password" id="loginPassword" placeholder="Passwort" required>
+                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPassword')">👁️</button>
+                </div>
+                <button type="submit">Anmelden</button>
+            </form>
+        </div>
+
+        <div id="message-section">
+            <h2>Nachricht senden</h2>
+            <form id="messageForm" enctype="multipart/form-data">
+                <input type="text" id="receiverUsername" placeholder="Empfänger-Username" required><br>
+                <textarea id="messageContent" placeholder="Nachricht" rows="2"></textarea><br>
+                <label for="file">Datei auswählen:</label>
+                <input type="file" id="file" name="file"><br>
+                <button type="submit">Nachricht senden</button>
+            </form>
+
+            <hr>
+
+            <h2>Eingegangene Nachrichten</h2>
+            <input type="text" id="chatPartner" placeholder="Username des Chat-Partners" required>
+            <button id="refreshButton">Nachrichten laden</button>
+            <pre id="messages"></pre>
+        </div>
+        
+        <pre id="response" class="status"></pre>
+    </div>
+
+    <script>
+        const API_URL = 'https://192.168.178.89:3000';
+        const responseDiv = document.getElementById('response');
+        const authSection = document.getElementById('auth-section');
+        const messageSection = document.getElementById('message-section');
+        const messagesDiv = document.getElementById('messages');
+        let loggedInUser = null;
+
+        function togglePasswordVisibility(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (field.type === 'password') {
+                field.type = 'text';
+            } else {
+                field.type = 'password';
+            }
+        }
+        
+        const toggleSwitch = document.querySelector('#checkbox');
+
+        function switchTheme(e) {
+            if (e.target.checked) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+        }
+
+        toggleSwitch.addEventListener('change', switchTheme, false);
+
+
+        async function fetchAndDisplayMessages() {
+            if (!loggedInUser) return;
+            const friendUsername = document.getElementById('chatPartner').value;
+            if (!friendUsername) {
+                messagesDiv.textContent = 'Bitte gib einen Chat-Partner-Username ein.';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/messages?user1=${loggedInUser.username}&user2=${friendUsername}`);
+                const data = await res.json();
+                
+                if (res.ok) {
+                    messagesDiv.innerHTML = '';
+                    if (data && data.length > 0) {
+                        data.forEach(msg => {
+                            const senderName = msg.sender_id === loggedInUser.id ? loggedInUser.username : friendUsername;
+                            
+                            let messageHtml = `[${msg.timestamp}] ${senderName}: ${msg.content || 'Kein Text'}`;
+                            
+                            if (msg.file_path) {
+                                const fileName = msg.file_path.split('/').pop();
+                                messageHtml += ` <br>Datei: <a href="${API_URL}/${msg.file_path}" download="${fileName}"><button>Download</button></a>`;
+                            }
+                            
+                            const p = document.createElement('p');
+                            p.innerHTML = messageHtml;
+                            messagesDiv.appendChild(p);
+                        });
+                    } else {
+                        messagesDiv.innerHTML = `<p>Keine Nachrichten mit ${friendUsername} gefunden.</p>`;
+                    }
+                } else {
+                    responseDiv.textContent = `Fehler beim Abrufen der Nachrichten: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                console.error('Fetch-Fehler:', error);
+                responseDiv.textContent = 'Fehler beim Verbinden mit dem Server.';
+            }
+        }
+        
+        async function loginAndDisplay(username, password) {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                loggedInUser = { username: username, id: data.userId };
+                authSection.style.display = 'none';
+                messageSection.style.display = 'block';
+                document.getElementById('loggedInUsername').textContent = `Willkommen, ${username}!`;
+            }
+                // ... Ende des if (res.ok) Blocks ...
+    
+                // HIER KORRIGIEREN:
+                if (data.error) {
+                // Der Server hat eine Fehlermeldung (z.B. "Ungültiges Passwort") gesendet
+                responseDiv.textContent = `FEHLER: ${data.error}`;
+            } else if (!res.ok) {
+                // Der Server hat einen anderen unbekannten HTTP-Fehlercode gesendet
+                responseDiv.textContent = `FEHLER: Anmeldung fehlgeschlagen (Status: ${res.status})`;
+            } else {
+                // Fallback für den Login-Code, falls er oben erfolgreich war
+                responseDiv.textContent = `Anmeldung erfolgreich: ${data.message || 'Willkommen!'}`;
+            }
+
+            // Die alte Zeile MUSS gelöscht oder auskommentiert werden:
+            // responseDiv.textContent = JSON.stringify(data, null, 2);
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+    
+            // ... (Code zum Abrufen von Username und Passwort) ...
+
+            const res = await fetch(`${API_URL}/register`, {
+                // ... (fetch-Konfiguration) ...
+            });
+            const data = await res.json();
+    
+            if (res.ok) {
+                // Wenn die Registrierung erfolgreich war:
+                await loginAndDisplay(username, password);
+        
+                // NEU: Erfolgsmeldung im Terminal (optional: Du kannst die Meldung auch direkt aus dem Login übernehmen, wenn loginAndDisplay das Terminal leert/überschreibt)
+                responseDiv.textContent = `ERFOLG: ${data.message || 'Registrierung und Login erfolgreich!'}`; 
+            } 
+    
+            // NEU: Fehlerbehandlung hinzufügen
+            if (data.error) {
+                responseDiv.textContent = `FEHLER: ${data.error}`; 
+            } else if (!res.ok) {
+                // Fallback für einen generischen Fehlerstatus (z.B. 404, 500)
+                responseDiv.textContent = `FEHLER: Registrierung fehlgeschlagen (Status: ${res.status})`;
+            }
+    
+            // // responseDiv.textContent = JSON.stringify(data, null, 2); // <- DIE ALTE ZEILE LÖSCHEN!
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            await loginAndDisplay(username, password);
+        });
+
+        document.getElementById('messageForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const receiverUsername = document.getElementById('receiverUsername').value;
+            const content = document.getElementById('messageContent').value;
+            const fileInput = document.getElementById('file');
+            const file = fileInput.files[0];
+
+            const formData = new FormData();
+            formData.append('senderUsername', loggedInUser.username);
+            formData.append('receiverUsername', receiverUsername);
+
+            if (content) {
+                formData.append('content', content);
+            }
+            if (file) {
+                formData.append('file', file);
+            }
+            
+            const res = await fetch(`${API_URL}/send`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await res.json();
+            if (res.ok) {
+                fetchAndDisplayMessages();
+                document.getElementById('messageContent').value = '';
+                document.getElementById('file').value = '';
+            }
+            responseDiv.textContent = JSON.stringify(data, null, 2);
+        });
+
+        document.getElementById('refreshButton').addEventListener('click', fetchAndDisplayMessages);
+
+        function logout() {
+            loggedInUser = null; // Benutzerdaten zurücksetzen
+            document.getElementById('loggedInUsername').textContent = 'Willkommen!'; // Standardtext wiederherstellen
+            authSection.style.display = 'block'; // Anmeldebereich anzeigen
+            messageSection.style.display = 'none'; // Nachrichtenbereich ausblenden
+        }
+
+        // Event-Listener zum Textfeld hinzufügen
+        document.getElementById('loggedInUsername').addEventListener('click', logout);
+    </script>
+</body>
+</html>
