@@ -4,7 +4,14 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer'); // Multer-Paket importieren
 const path = require('path');
+const cors = require('cors');
+// ...
 const app = express();
+
+// Fügen Sie DIESE ZEILE HINZU, um CORS für alle Anfragen zu aktivieren
+app.use(cors()); 
+
+// ... der Rest Ihrer app.use(express.json()) Zeilen ...
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
