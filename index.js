@@ -7,7 +7,7 @@ const sqlite3 = require('sqlite3').verbose();
 const multer = require('multer'); // Multer-Paket importieren
 const path = require('path');
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const options = {
     key: fs.readFileSync('key.pem'),
     cert: fs.readFileSync('cert.pem')
