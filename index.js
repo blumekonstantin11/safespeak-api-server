@@ -1,4 +1,6 @@
+// Dummy-Änderung zum Neustarten des Servers
 const bcrypt =require('bcrypt');
+// ... der Rest des Codes
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
 
 const express = require('express');
