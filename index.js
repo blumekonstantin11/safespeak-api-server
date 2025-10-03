@@ -6,14 +6,6 @@ import path from 'path';
 
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
 
-// const express = require('express');  <- DIESE ZEILE ENTFERNEN
-// const sqlite3 = require('sqlite3').verbose(); <- DIESE ZEILE ENTFERNEN
-// const multer = require('multer'); // Multer-Paket importieren <- DIESE ZEILE ENTFERNEN
-// const path = require('path'); <- DIESE ZEILE ENTFERNEN
-
-const cors = require('cors'); // <- DAS MUSS AUCH GEÄNDERT WERDEN
-
-// ACHTUNG: Auch CORS muss geändert werden:
 import cors from 'cors'; 
 
 const app = express();
