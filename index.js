@@ -37,16 +37,26 @@ const db = new sqlite3v.Database('safespeak.db', (err) => {
     if (err) {
         console.error('Fehler beim Verbinden mit der Datenbank:', err.message);
         // ... im else-Block der Datenbankverbindung
-            } else {
-                console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
-                // DIESER CODE LÖSCHT DIE TESTKONTEN NUR EINMAL BEIM START
-                db.run("DELETE FROM users WHERE username = 'Test1'");
-                db.run("DELETE FROM users WHERE username = 'Layla'");
-                db.run("DELETE FROM messages");
-                // ENDE DES LÖSCHCODES
-            }
-//...
-        })
+    } else {
+        console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
+        // HIER MUSS DIE INITIALISIERUNG AUFGERUFEN WERDEN!
+        initialize(); // RUFEN SIE DIE FUNKTION AUF, WENN SIE NOCH NICHT DA IST!
+    }
+});
+
+function initialize() {
+    db.serialize(() => { // DIESER BLOCK IST NUN SEHR WICHTIG
+        db.run(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL
+            );
+        `);
+        // ... Code für die messages Tabelle hier ...
+        console.log("Datenbanktabellen wurden überprüft und erstellt.");
+    });
+}
 // Neue Tabellen für Dateiinhalte und Dateinachrichten erstellen
 db.serialize(() => {
     db.run(`
