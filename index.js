@@ -18,6 +18,14 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('.'));
 
+const response = await fetch(API_URL + '/register', {
+    method: 'POST', // DIES IST DER KRITISCHE PUNKT!
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, password })
+});
+
 // Konfiguration für Multer (Dateispeicherort)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
