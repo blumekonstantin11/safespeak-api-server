@@ -45,6 +45,11 @@ const db = new sqlite3.Database('safespeak.db', (err) => {
     }
     console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
 });
+// DIESER CODE LÖSCHT DIE TESTKONTEN NUR EINMAL BEIM START
+db.run("DELETE FROM users WHERE username = 'TestUser1'");
+db.run("DELETE FROM users WHERE username = 'TestUser2'");
+db.run("DELETE FROM messages WHERE content IS NOT NULL");
+// ENDE DES LÖSCHCODES
 
 // Neue Tabellen für Dateiinhalte und Dateinachrichten erstellen
 db.serialize(() => {
