@@ -1,15 +1,24 @@
-// Dummy-Änderung zum Neustarten des Servers
-const bcrypt =require('bcrypt');
-// ... der Rest des Codes
+import bcrypt from 'bcrypt';
+import express from 'express';
+import sqlite3v from 'sqlite3'; // Wir importieren sqlite3 als 'sqlite3v' (für verbose)
+import multer from 'multer';
+import path from 'path';
+
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
 
-const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const multer = require('multer'); // Multer-Paket importieren
-const path = require('path');
+// const express = require('express');  <- DIESE ZEILE ENTFERNEN
+// const sqlite3 = require('sqlite3').verbose(); <- DIESE ZEILE ENTFERNEN
+// const multer = require('multer'); // Multer-Paket importieren <- DIESE ZEILE ENTFERNEN
+// const path = require('path'); <- DIESE ZEILE ENTFERNEN
 
-const cors = require('cors');
+const cors = require('cors'); // <- DAS MUSS AUCH GEÄNDERT WERDEN
+
+// ACHTUNG: Auch CORS muss geändert werden:
+import cors from 'cors'; 
+
 const app = express();
+
+//..
 
 // Fügen Sie DIESE ZEILE HINZU, um CORS für alle Anfragen zu aktivieren
 app.use(cors()); 
@@ -39,7 +48,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-const db = new sqlite3.Database('safespeak.db', (err) => {
+// Wir verwenden den umbenannten Import, um das .verbose() zu ersetzen
+const db = new sqlite3v.verbose().Database('safespeak.db', (err) => { 
+// ...
     if (err) {
         return console.error(err.message);
     }
