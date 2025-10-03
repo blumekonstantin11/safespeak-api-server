@@ -32,15 +32,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Wir verwenden den umbenannten Import, um das .verbose() zu ersetzen
-const db = new sqlite3v.verbose().Database('safespeak.db', (err) => { 
-// ...
+// Nur die Klasse importieren und direkt verwenden
+db = new sqlite3v.Database('safespeak.db', (err) => {
     if (err) {
-        return console.error(err.message);
-    }
-    console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
-});
-
+        console.error('Fehler beim Verbinden mit der Datenbank:', err.message);
+        } else {
+                console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
+                // DIESER CODE LÖSCHT DIE TESTKONTEN NUR EINMAL BEIM START
+                db.run("DELETE FROM users WHERE username = 'IHR_TESTUSER_1'");
+                db.run("DELETE FROM users WHERE username = 'IHR_TESTUSER_2'");
+                db.run("DELETE FROM messages");
+                // ENDE DES LÖSCHCODES
+            }
+        })
 // Neue Tabellen für Dateiinhalte und Dateinachrichten erstellen
 db.serialize(() => {
     db.run(`
