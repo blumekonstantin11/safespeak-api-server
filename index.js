@@ -21,14 +21,6 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('.'));
 
-const response = await fetch(API_URL + '/register', {
-    method: 'POST', // DIES IST DER KRITISCHE PUNKT!
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, password })
-});
-
 // Konfiguration für Multer (Dateispeicherort)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -48,11 +40,6 @@ const db = new sqlite3v.verbose().Database('safespeak.db', (err) => {
     }
     console.log('Erfolgreich mit der SafeSpeak-Datenbank verbunden.');
 });
-// DIESER CODE LÖSCHT DIE TESTKONTEN NUR EINMAL BEIM START
-db.run("DELETE FROM users WHERE username = 'TestUser1'");
-db.run("DELETE FROM users WHERE username = 'TestUser2'");
-db.run("DELETE FROM messages WHERE content IS NOT NULL");
-// ENDE DES LÖSCHCODES
 
 // Neue Tabellen für Dateiinhalte und Dateinachrichten erstellen
 db.serialize(() => {
