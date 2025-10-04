@@ -174,6 +174,51 @@ app.post('/send', upload.single('file'), (req, res) => {
     });
 });
 
+// NEUE, GESCHÜTZTE ROUTE FÜR DATEI-DOWNLOADS
+app.get('/download/:filePath', (req, res) => {
+    // Der Dateipfad wird als 'uploads/DATEINAME.EXT' übergeben, 
+    // aber wir müssen ihn wieder zusammensetzen, da Express alles nach dem / als Parameter sieht
+    const requestedPath = req.params.filePath; 
+    
+    // Annahme: Der Client schickt den Absender-Username im Query-Parameter
+    // Dies ist eine notwendige PRÜFUNG, um sicherzustellen, dass nur Berechtigte herunterladen
+    const clientUsername = req.query.username; 
+    
+    if (!clientUsername) {
+        return res.status(401).json({ error: 'Autorisierung fehlt.' });
+    }
+
+    // 1. Hole die Benutzer-ID des anfragenden Clients
+    getUserId(clientUsername, (err, clientId) => {
+        if (err || !clientId) {
+            return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+        }
+        
+        // 2. Prüfe in der 'messages'-Tabelle, ob diese Datei
+        //    zwischen dem Client und einem Partner existiert.
+        //    (Der Client muss entweder Absender oder Empfänger sein)
+        db.get(`
+            SELECT * FROM messages 
+            WHERE file_path = ? AND (sender_id = ? OR receiver_id = ?)
+        `, [requestedPath, clientId, clientId], (err, row) => {
+            if (err || !row) {
+                // Wenn kein Eintrag gefunden wird, ist der Zugriff verweigert
+                return res.status(403).json({ error: 'Zugriff verweigert oder Datei nicht gefunden.' });
+            }
+
+            // 3. Wenn die Überprüfung erfolgreich war: Datei senden!
+            const absolutePath = path.resolve(requestedPath);
+            res.download(absolutePath, (err) => {
+                if (err) {
+                    console.error('Fehler beim Dateidownload:', err);
+                    // Sende einen Fehlercode, aber verringere das Risiko, den Pfad preiszugeben
+                    res.status(500).json({ error: 'Fehler beim Laden der Datei.' }); 
+                }
+            });
+        });
+    });
+});
+
 // Angepasste Route zum Abrufen von Nachrichten und Dateien
 app.get('/messages', (req, res) => {
     const { user1, user2 } = req.query;
