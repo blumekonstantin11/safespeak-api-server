@@ -19,7 +19,7 @@ app.use(cors());
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static('.'));
+// app.use(express.static('.')); // DIESE ZEILE WURDE ZUR SICHERHEIT ENTFERNT/AUSKOMMENTIERT
 
 // Konfiguration für Multer (Dateispeicherort)
 const storage = multer.diskStorage({
