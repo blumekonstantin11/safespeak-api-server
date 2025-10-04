@@ -5,8 +5,45 @@ import multer from 'multer';
 import path from 'path';
 
 const saltRounds = 10; // Empfohlene Anzahl der Runden für das Hashing
+// server.js (ganz oben, zu den anderen Imports)
+// NEU: Importiere die notwendigen Funktionen von express-validator
+import { body, validationResult } from 'express-validator';
 
 import cors from 'cors'; 
+
+// NEU: Imports und Konfiguration für den Winston Logger
+const winston = require('winston');
+const { combine, timestamp, printf, colorize } = winston.format;
+
+// NEU: Definiere das Format für die Log-Einträge
+const logFormat = printf(({ level, message, timestamp }) => {
+  return `${timestamp} [${level}]: ${message}`;
+});
+
+// NEU: Erstelle den Logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: combine(
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    logFormat
+  ),
+  transports: [
+    // 1. Konsole: Zeigt farbige Logs beim Entwickeln
+    new winston.transports.Console({
+      format: combine(
+        colorize(), 
+        logFormat
+      )
+    }),
+    
+    // 2. Datei: Speichert alle Logs auf dem Server (combined.log)
+    new winston.transports.File({ filename: 'combined.log' }),
+    
+    // 3. Datei: Speichert nur Fehler (error.log)
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+  ],
+  exitOnError: false, 
+});
 
 const app = express();
 
@@ -95,29 +132,36 @@ function getUserId(username, callback) {
 }
 
 // Benutzer registrieren
-app.post('/register', async (req, res) => { 
-    const { username, password } = req.body;
+app.post('/register', 
+    // NEU: Validierungs-Middleware
+    [
+        // Prüft, ob der Username existiert und nur Buchstaben/Zahlen/Unterstriche enthält (Sanitization)
+        body('username')
+            .isString().withMessage('Benutzername muss ein Text sein.')
+            .isLength({ min: 3 }).withMessage('Benutzername muss mindestens 3 Zeichen lang sein.')
+            .matches(/^[a-zA-Z0-9_]+$/).withMessage('Benutzername darf nur Buchstaben, Zahlen und Unterstriche enthalten.')
+            .trim() // Entfernt Leerzeichen am Anfang und Ende (Sanitization)
+            .escape(), // Kodiert HTML-Entitäten (Sanitization)
 
-    try {
-        // Passwort hashen (verschlüsseln)
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-        db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hashedPassword], function(err) {
-            if (err) {
-                // Prüfen, ob der Fehler ein doppelter Username ist
-                if (err.message.includes('UNIQUE constraint failed')) {
-                    return res.status(400).json({ error: "Registrierung fehlgeschlagen. Username existiert bereits." });
-                }
-                return res.status(500).json({ error: "Ein unbekannter Fehler ist aufgetreten." });
-            }
-            res.json({ message: "Benutzer erfolgreich registriert!", userId: this.lastID });
-        });
-
-    } catch (hashError) {
-        console.error("Fehler beim Hashing:", hashError);
-        res.status(500).json({ error: "Fehler beim Verarbeiten des Passworts." });
-    }
-});
+        // Prüft die Passwort-Regeln
+        body('password')
+            .isLength({ min: 8 }).withMessage('Passwort muss mindestens 8 Zeichen lang sein.')
+    ],
+    // Hier startet die eigentliche Logik des Routes
+    async (req, res) => { 
+    
+        // NEU: Ergebnis der Validierung prüfen
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            logger.warn(`Registrierung abgelehnt. Validierungsfehler: ${errors.array()[0].msg} für Benutzername: ${req.body.username}`);
+            // Sende den ersten Fehler im Array zurück
+            return res.status(400).json({ errors: errors.array({ onlyFirstError: true })[0].msg });
+        }
+        
+        const { username, password } = req.body;
+        // ... der Rest deines Codes folgt hier
+        }
+    )
 
 // Benutzer anmelden
 app.post('/login', (req, res) => {
@@ -150,29 +194,29 @@ app.post('/login', (req, res) => {
 });
 
 // Angepasste Route zum Senden von Nachrichten und Dateien
-app.post('/send', upload.single('file'), (req, res) => {
-    const { senderUsername, receiverUsername, content } = req.body;
-    const filePath = req.file ? req.file.path : null;
-
-    getUserId(senderUsername, (err, senderId) => {
-        if (err) {
-            return res.status(404).send({ message: `Absender-Benutzername '${senderUsername}' nicht gefunden.` });
+app.post('/send', 
+    upload.single('file'), 
+    // NEU: Validierungs-Middleware
+    [
+        body('senderUsername').trim().escape(),
+        body('receiverUsername').trim().escape(),
+        body('content')
+            .optional() // Inhalt ist optional, da es auch nur eine Datei sein kann
+            .isLength({ max: 2000 }).withMessage('Nachricht ist zu lang (max. 2000 Zeichen).')
+            .escape() // Bereinigt den Nachrichteninhalt
+    ],
+    // Hier startet die eigentliche Logik des Routes
+    (req, res) => {
+        
+        // NEU: Ergebnis der Validierung prüfen
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            logger.warn(`Senden abgelehnt. Validierungsfehler: ${errors.array()[0].msg}.`);
+            return res.status(400).json({ errors: errors.array({ onlyFirstError: true })[0].msg });
         }
-        getUserId(receiverUsername, (err, receiverId) => {
-            if (err) {
-                return res.status(404).send({ message: `Empfänger-Benutzername '${receiverUsername}' nicht gefunden.` });
-            }
-            db.run(`INSERT INTO messages (sender_id, receiver_id, content, file_path) VALUES (?, ?, ?, ?)`, 
-                   [senderId, receiverId, content, filePath], 
-                   function(err) {
-                if (err) {
-                    return res.status(500).send({ message: 'Fehler beim Senden der Nachricht.' });
-                }
-                res.status(201).send({ message: 'Nachricht erfolgreich gesendet!', messageId: this.lastID });
-            });
+        
+        // ... der Rest deines Codes folgt hier
         });
-    });
-});
 
 // NEUE, GESCHÜTZTE ROUTE FÜR DATEI-DOWNLOADS
 app.get('/download/:filePath', (req, res) => {
