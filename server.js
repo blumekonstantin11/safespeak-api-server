@@ -6,7 +6,9 @@ import sqlite3v from 'sqlite3';
 import multer from 'multer';
 import path from 'path';
 import { body, validationResult } from 'express-validator';
-import cors from 'cors'; 
+import cors from 'cors';
+
+import rateLimit from 'express-rate-limit';
 
 // NEU: Imports für JWT und Logger
 import jwt from 'jsonwebtoken'; 
@@ -20,8 +22,23 @@ const { combine, timestamp, printf, colorize } = format;
 // NACHHER (den Schlüssel aus der .env-Datei lesen):
 // GEHEIMNISSE
 const JWT_SECRET = process.env.JWT_SECRET;
+const saltRounds = 10;
 
-const saltRounds = 10; 
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 Minuten
+    max: 5, // Maximal 5 Versuche pro IP-Adresse innerhalb des Fensters
+    standardHeaders: true, // Fügt die Rate-Limit-Header (z.B. X-RateLimit-Limit) hinzu
+    legacyHeaders: false, // Deaktiviert die X-RateLimit-*-Header (optional, aber modern)
+    message: async (req, res) => {
+        const ip = req.ip || req.connection.remoteAddress;
+        logger.warn(`BRUTE FORCE ABGEWEHRT: IP ${ip} hat zu viele Login-Versuche gestartet.`);
+        return res.status(429).json({
+            error: "Zu viele Anmeldeversuche. Bitte versuche es in 15 Minuten erneut."
+        });
+    },
+    // WICHTIG: Sollte verhindern, dass der Limiter bei falschen Anmeldeversuchen zurückgesetzt wird.
+    skipSuccessfulRequests: true, 
+});
 
 // ---------------------------------
 // LOGGER KONFIGURATION
@@ -159,7 +176,7 @@ app.post('/register',
 
 
 // Benutzer anmelden
-app.post('/login', (req, res) => {
+app.post('/login', loginLimiter, (req, res) => {
     // Hier wäre der Platz für den loginLimiter, falls du ihn implementiert hast.
     const { username, password } = req.body;
 
