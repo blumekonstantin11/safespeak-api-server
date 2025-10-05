@@ -1,14 +1,10 @@
 # .gitignore
 
-# 1. Node-Module (unbedingt ignorieren)
 /node_modules
-
-# 2. Lokale Serverdateien
 /uploads
 /safespeak.db
 /safespeak.db-journal
-
-# 3. Log-Dateien (aus Datenschutz- und Performance-Gründen ignorieren)
 /*.log
-/combined.log
-/error.log
+
+# NEU: Diese Datei MUSS ignoriert werden!
+.env
