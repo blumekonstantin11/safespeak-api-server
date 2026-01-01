@@ -89,7 +89,40 @@ const db = new sqlite3v.Database('safespeak.db', (err) => {
 });
 
 function initialize() {
-    
+    db.serialize(() => {
+        db.run(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            )
+        `, (err) => {
+            if (err) {
+                logger.error(`Fehler beim Erstellen der Tabelle 'users': ${err.message}`);
+            } else {
+                logger.info("Tabelle 'users' ist bereit.");
+            }
+        });
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id INTEGER NOT NULL,
+                receiver_id INTEGER NOT NULL,
+                content TEXT,
+                file_path TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sender_id) REFERENCES users(id),
+                FOREIGN KEY (receiver_id) REFERENCES users(id)
+            )
+        `, (err) => {
+            if (err) {
+                logger.error(`Fehler beim Erstellen der Tabelle 'messages': ${err.message}`);
+            } else {
+                logger.info("Tabelle 'messages' ist bereit.");
+            }
+        });
+    });
 }
 // Zusätzliche/doppelte Initialisierungsblöcke entfernt, da initialize() alles abdeckt.
 
