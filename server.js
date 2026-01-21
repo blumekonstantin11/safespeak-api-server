@@ -62,7 +62,26 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // MIDDLEWARE
-app.use(cors()); 
+// Erlaube nur bekannte Frontend-Origins (Vercel + lokale Entwicklung)
+const allowedOrigins = [
+    'https://safespeak-frontend-web.vercel.app', // Vercel-Frontend
+    'http://localhost:3000',                    // Lokale Entwicklung (z.B. React/Node)
+    'http://localhost:5173',                    // Optional: Vite/dev-Server
+];
+
+app.use(cors({
+    origin(origin, callback) {
+        // Ohne Origin (z.B. Curl/Postman) ebenfalls erlauben
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error(`Not allowed by CORS: ${origin}`));
+        }
+    },
+    // Exponiere Content-Disposition, damit Downloads funktionieren
+    exposedHeaders: ['Content-Disposition'],
+}));
+
 app.use(express.json());
 
 // MULTER KONFIGURATION
