@@ -1,10 +1,7 @@
 # .gitignore
 
-/node_modules
-/uploads
-/safespeak.db
-/safespeak.db-journal
-/*.log
-
-# NEU: Diese Datei MUSS ignoriert werden!
+ node_modules/
 .env
+*.db
+*.log
+uploads/

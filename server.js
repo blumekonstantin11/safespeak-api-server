@@ -15,6 +15,29 @@ import jwt from 'jsonwebtoken';
 import winston, { format } from 'winston';
 const { combine, timestamp, printf, colorize } = format;
 
+const tf = require('@tensorflow/tfjs');
+const nsfw = require('nsfwjs');
+const fs = require('fs');
+
+let nsfwModel;
+
+// Das Modell beim Serverstart laden
+async function loadModerationModel() {
+    console.log("Lade Jugendschutz-Modell...");
+    nsfwModel = await nsfw.load();
+    console.log("Modell bereit!");
+}
+loadModerationModel();
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
 // VORHER:
 // GEHEIMNISSE
 // const JWT_SECRET = 'Ein_Sehr_Geheimer_Schluessel_Fuer_SafeSpeak_Den_Niemand_Errät_ABC123';
@@ -84,16 +107,52 @@ app.use(cors({
 
 app.use(express.json());
 
-// MULTER KONFIGURATION
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); 
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
+// SICHERE DATEI-DOWNLOAD ROUTE
+app.get('/download/:filePath', verifyToken, (req, res) => {
+    // 1. Nur den Dateinamen extrahieren, um Pfad-Manipulationen (../) zu verhindern
+    const fileName = path.basename(req.params.filePath);
+    const absolutePath = path.join(__dirname, 'uploads', fileName);
+    
+    const clientUsername = req.user.username; 
+    
+    getUserId(clientUsername, (err, clientId) => {
+        if (err || !clientId) {
+            logger.error(`Kritischer Fehler: Download-Client ${clientUsername} nicht in DB.`);
+            return res.status(500).json({ error: 'Interner Autorisierungsfehler.' });
+        }
+        
+        // 2. Datenbank-Check: Darf dieser User die Datei sehen?
+        // Wir suchen nach einer Nachricht, die diesen Dateipfad hat UND wo der User Sender oder Empfänger ist.
+        db.get(`
+            SELECT * FROM messages 
+            WHERE file_path LIKE ? AND (sender_id = ? OR receiver_id = ?)
+        `, [`%${fileName}%`, clientId, clientId], (err, row) => {
+            if (err) {
+                logger.error(`Datenbankfehler bei Download-Prüfung: ${err.message}`);
+                return res.status(500).json({ error: 'Interner Serverfehler.' });
+            }
+            
+            if (!row) {
+                logger.warn(`Zugriff verweigert: ${clientUsername} wollte ${fileName} laden.`);
+                return res.status(403).json({ error: 'Zugriff verweigert oder Datei nicht gefunden.' });
+            }
+
+            // 3. Datei senden
+            res.download(absolutePath, fileName, (err) => {
+                if (err) {
+                    if (res.headersSent) {
+                        // Header wurden bereits gesendet, wir können keine JSON-Fehlermeldung mehr schicken
+                        return;
+                    }
+                    logger.error(`Fehler beim Dateidownload: ${err}`);
+                    res.status(404).json({ error: 'Datei auf dem Server nicht gefunden.' }); 
+                } else {
+                    logger.info(`Download erfolgreich: ${fileName} durch ${clientUsername}.`);
+                }
+            });
+        });
+    });
 });
-const upload = multer({ storage: storage });
 
 // ---------------------------------
 // DATENBANK UND INITIALISIERUNG
@@ -109,11 +168,13 @@ const db = new sqlite3v.Database('safespeak.db', (err) => {
 
 function initialize() {
     db.serialize(() => {
+        // Tabelle 'users' erstellen
         db.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                location TEXT
             )
         `, (err) => {
             if (err) {
@@ -123,6 +184,7 @@ function initialize() {
             }
         });
 
+        // Tabelle 'messages' erstellen
         db.run(`
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,44 +242,71 @@ function verifyToken(req, res, next) {
         next(); 
     });
 }
+// Liste verbotener Begriffe und Muster (Erweiterbar)
+const blockList = [
+    /selbstmord/i, /suizid/i, /umbringen/i, 
+    /nacktbild/i, /porno/i, /sex/i, /nude/i
+];
+
+function isContentBlocked(text) {
+    if (!text) return false;
+    // Prüft, ob einer der Begriffe im Text vorkommt
+    return blockList.some(pattern => pattern.test(text));
+}
 
 // ---------------------------------
 // ROUTEN
 // ---------------------------------
 
 // Benutzer registrieren
+// Benutzer registrieren
 app.post('/register', 
     [
         body('username')
-            .isString().withMessage('Benutzername muss ein Text sein.').isLength({ min: 3 }).withMessage('Benutzername muss mindestens 3 Zeichen lang sein.')
-            .matches(/^[a-zA-Z0-9_]+$/).withMessage('Benutzername darf nur Buchstaben, Zahlen und Unterstriche enthalten.').trim().escape(), 
+            .isString().withMessage('Benutzername muss ein Text sein.')
+            .isLength({ min: 3 }).withMessage('Benutzername muss mindestens 3 Zeichen lang sein.')
+            .matches(/^[a-zA-Z0-9_]+$/).withMessage('Benutzername darf nur Buchstaben, Zahlen und Unterstriche enthalten.')
+            .trim().escape(), 
         body('password')
-            .isLength({ min: 8 }).withMessage('Passwort muss mindestens 8 Zeichen lang sein.')
+            .isLength({ min: 8 }).withMessage('Passwort muss mindestens 8 Zeichen lang sein.'),
+        body('location').trim().escape() // Location validieren
     ],
     async (req, res) => { 
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            logger.warn(`Registrierung abgelehnt. Validierungsfehler: ${errors.array({ onlyFirstError: true })[0].msg} für Benutzername: ${req.body.username}`);
-            return res.status(400).json({ errors: errors.array({ onlyFirstError: true })[0].msg });
+            logger.warn(`Registrierung abgelehnt. Validierungsfehler: ${errors.array()[0].msg}`);
+            return res.status(400).json({ error: errors.array()[0].msg });
         }
         
-        const { username, password } = req.body;
+        const { username, password, location } = req.body;
 
         try {
             const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-            db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hashedPassword], function(err) {
-                if (err) {
-                    if (err.message.includes('UNIQUE constraint failed')) {
-                        logger.warn(`Registrierung fehlgeschlagen. Username existiert bereits: ${username}`);
-                        return res.status(400).json({ error: "Registrierung fehlgeschlagen. Username existiert bereits." });
-                    }
-                    logger.error(`Fehler bei der Registrierung von ${username}: ${err.message}`);
-                    return res.status(500).json({ error: "Ein unbekannter Fehler ist aufgetreten." });
+            db.get(`SELECT id FROM users WHERE username = ? AND location = ? AND is_blocked = 1`, 
+                [username, location], (err, row) => {
+                if (row) {
+                    return res.status(403).json({ error: "Dieser Name an diesem Standort ist dauerhaft vom System ausgeschlossen." });
                 }
-                logger.info(`NEUER BENUTZER: ${username} (ID: ${this.lastID}) erfolgreich registriert.`);
-                res.json({ message: "Benutzer erfolgreich registriert!", userId: this.lastID });
+                // ... restliche Registrierung
             });
+
+            db.run(
+                "INSERT INTO users (username, password, location) VALUES (?, ?, ?)", 
+                [username, hashedPassword, location || null], 
+                function(err) {
+                    if (err) {
+                        if (err.message.includes('UNIQUE constraint failed')) {
+                            logger.warn(`Registrierung fehlgeschlagen. Username existiert bereits: ${username}`);
+                            return res.status(400).json({ error: "Registrierung fehlgeschlagen. Username existiert bereits." });
+                        }
+                        logger.error(`Fehler bei der Registrierung von ${username}: ${err.message}`);
+                        return res.status(500).json({ error: "Ein unbekannter Fehler ist aufgetreten." });
+                    }
+                    logger.info(`NEUER BENUTZER: ${username} (ID: ${this.lastID}) erfolgreich registriert.`);
+                    res.json({ message: "Benutzer erfolgreich registriert!", userId: this.lastID });
+                }
+            );
 
         } catch (hashError) {
             logger.error("Fehler beim Hashing während der Registrierung:", hashError);
@@ -232,6 +321,12 @@ app.post('/login', loginLimiter, (req, res) => {
     // Hier wäre der Platz für den loginLimiter, falls du ihn implementiert hast.
     const { username, password } = req.body;
 
+    db.get(`SELECT is_blocked FROM users WHERE username = ?`, [username], (err, row) => {
+        if (row && row.is_blocked) {
+            return res.status(403).json({ error: "Dieser Account ist permanent gesperrt." });
+        }
+        // ... restlicher Login
+    });
     db.get("SELECT id, password FROM users WHERE username = ?", [username], async (err, row) => {
         if (err) {
             logger.error(`Datenbankfehler beim Login für Nutzer ${username}: ${err.message}`);
@@ -274,28 +369,72 @@ app.post('/login', loginLimiter, (req, res) => {
 });
 
 
-// Nachricht senden (JETZT GESCHÜTZT UND KORREKT)
-app.post('/send', 
-    verifyToken, // NEU: Token-Prüfung hinzugefügt
-    upload.single('file'), 
-    [
-        // senderUsername wird aus dem Token geholt, nur receiverUsername benötigt Validierung
-        body('receiverUsername').trim().escape(),
-        body('content')
-            .optional().isLength({ max: 2000 }).withMessage('Nachricht ist zu lang (max. 2000 Zeichen).')
-            .escape() 
-    ],
-    
-    (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            logger.warn(`Senden abgelehnt. Validierungsfehler: ${errors.array({ onlyFirstError: true })[0].msg}.`);
-            return res.status(400).json({ errors: errors.array({ onlyFirstError: true })[0].msg });
-        }
-        
-        const senderUsername = req.user.username; // KORREKTUR: Sicher aus dem Token geholt
-        const { receiverUsername, content } = req.body;
-        const filePath = req.file ? req.file.path : null;
+        app.post('/send', verifyToken, upload.single('file'), async (req, res) => {
+            const { receiverUsername, content } = req.body;
+            const senderUsername = req.user.username;
+
+            // 1. Text-Filter (Suizid/Gewalt)
+            if (isContentBlocked(content)) {
+                if (req.file) fs.unlinkSync(req.file.path); // Datei löschen, falls vorhanden
+                return res.status(400).json({ error: "Nachricht blockiert (Sicherheitsrichtlinien)." });
+            }
+
+            // 2. Bild-Filter (Sexualsperre)
+            if (req.file) {
+                try {
+                    const imageBuffer = fs.readFileSync(req.file.path);
+                    // Das Bild für die KI vorbereiten
+                    const image = tf.node.decodeImage(imageBuffer, 3);
+                    const predictions = await nsfwModel.classify(image);
+                    image.dispose(); // Speicher wieder freigeben
+
+                    // Wir prüfen auf 'Porn' oder 'Hentai' mit einer Wahrscheinlichkeit > 60%
+                    const isUnsafe = predictions.some(p => 
+                        (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.6
+                    );
+
+                    if (isUnsafe) {
+                        fs.unlinkSync(req.file.path); // Beweis vernichten ;)
+                        return res.status(400).json({ error: "Bild blockiert: Unzulässiger Inhalt erkannt." });
+                    }
+                } catch (err) {
+                    console.error("Fehler bei Bildanalyse:", err);
+                    // Im Zweifel: Datei löschen, wenn die Analyse fehlschlägt
+                    fs.unlinkSync(req.file.path);
+                    return res.status(500).json({ error: "Fehler bei der Sicherheitsprüfung des Bildes." });
+                }
+            }
+
+            // ... Dein restlicher Code zum Speichern in der DB ...
+        });
+
+        const blockUser = () => {
+            db.run(`UPDATE users SET strikes = strikes + 1 WHERE id = ?`, [req.user.id], (err) => {
+                if (err) return console.error(err);
+
+                // Aktuelle Strike-Zahl prüfen
+                db.get(`SELECT strikes FROM users WHERE id = ?`, [req.user.id], (err, row) => {
+                    if (row && row.strikes >= 3) {
+                        const twoDaysLater = new Date();
+                            twoDaysLater.setDate(twoDaysLater.getDate() + 2);
+
+                            db.run(`UPDATE users SET is_blocked = 1, deletion_date = ? WHERE id = ?`, 
+                                [twoDaysLater.toISOString(), req.user.id], () => {
+                                console.log(`User ${req.user.username} wurde permanent gesperrt.`);
+                            });
+                        }
+                    });
+                });
+            };
+
+            // Aufruf der Funktion im Fehlerfall: 
+            if (isContentBlocked(content) || isUnsafe) {
+                if (req.file) fs.unlinkSync(req.file.path);
+                blockUser(); // Strike hinzufügen / Sperre prüfen
+                return res.status(403).json({ 
+                    error: "Sicherheitsverstoß: Dein Account wurde aufgrund wiederholter Verstöße für 2 Tage gesperrt und wird danach unwiderruflich gelöscht." 
+                });
+            }
 
         getUserId(senderUsername, (err, senderId) => {
             if (err) {
@@ -319,50 +458,74 @@ app.post('/send',
                 });
             });
         });
-    }
-);
+
 
 
 // Datei-Download (JETZT GESCHÜTZT UND KORREKT)
-app.get('/download/:filePath', verifyToken, (req, res) => { // NEU: Token-Prüfung hinzugefügt
-    const requestedPath = req.params.filePath; 
+app.get('/download/:filePath', verifyToken, (req, res) => {
+    // 1. Nur den Dateinamen extrahieren (Sicherheit gegen ../)
+    const fileName = path.basename(req.params.filePath);
+    const absolutePath = path.join(__dirname, 'uploads', fileName);
     
-    // KORREKTUR: clientUsername wird aus dem Token geholt (sicher!)
     const clientUsername = req.user.username; 
     
     getUserId(clientUsername, (err, clientId) => {
         if (err || !clientId) {
-            logger.error(`Kritischer Fehler: Download-Client ${clientUsername} aus Token nicht in DB.`);
+            logger.error(`Kritischer Fehler: Download-Client ${clientUsername} nicht in DB.`);
             return res.status(500).json({ error: 'Interner Autorisierungsfehler.' });
         }
         
+        // 2. Datenbank-Check: Ist der User berechtigt?
         db.get(`
             SELECT * FROM messages 
-            WHERE file_path = ? AND (sender_id = ? OR receiver_id = ?)
-        `, [requestedPath, clientId, clientId], (err, row) => {
+            WHERE file_path LIKE ? AND (sender_id = ? OR receiver_id = ?)
+        `, [`%${fileName}%`, clientId, clientId], (err, row) => {
             if (err) {
-                 logger.error(`Datenbankfehler bei Download-Prüfung für ${clientUsername}: ${err.message}`);
-                 return res.status(500).json({ error: 'Interner Serverfehler.' });
+                logger.error(`Datenbankfehler bei Download-Prüfung: ${err.message}`);
+                return res.status(500).json({ error: 'Interner Serverfehler.' });
             }
             
             if (!row) {
-                logger.warn(`Downloadversuch abgelehnt (Zugriff verweigert): ${clientUsername} versuchte ${requestedPath} herunterzuladen.`);
+                logger.warn(`Zugriff verweigert: ${clientUsername} wollte ${fileName} laden.`);
                 return res.status(403).json({ error: 'Zugriff verweigert oder Datei nicht gefunden.' });
             }
 
-            const absolutePath = path.resolve(requestedPath);
-            res.download(absolutePath, (err) => {
+            // 3. Datei senden
+            res.download(absolutePath, fileName, (err) => {
                 if (err) {
-                    logger.error(`Fehler beim Dateidownload von ${absolutePath} für ${clientUsername}: ${err}`); // KORREKTUR: logger.error
-                    res.status(500).json({ error: 'Fehler beim Laden der Datei.' }); 
+                    if (!res.headersSent) {
+                        logger.error(`Fehler beim Dateidownload: ${err}`);
+                        res.status(404).json({ error: 'Datei nicht gefunden.' }); 
+                    }
                 } else {
-                    logger.info(`Datei erfolgreich heruntergeladen: ${requestedPath} durch Nutzer ${clientUsername}.`); // NEU: Logging des Erfolgs
+                    logger.info(`Download erfolgreich: ${fileName} durch ${clientUsername}.`);
                 }
             });
         });
     });
 });
 
+app.get('/contacts', verifyToken, (req, res) => {
+    const userId = req.user.userId;
+
+    // Findet Leute am selben Ort ODER Leute, mit denen man schon geschrieben hat
+    const sql = `
+        SELECT DISTINCT id, username, location FROM users 
+        WHERE id != ? AND (
+            (location IS NOT NULL AND location = (SELECT location FROM users WHERE id = ?))
+            OR id IN (SELECT receiver_id FROM messages WHERE sender_id = ?)
+            OR id IN (SELECT sender_id FROM messages WHERE receiver_id = ?)
+        )
+    `;
+
+    db.all(sql, [userId, userId, userId, userId], (err, rows) => {
+        if (err) {
+            logger.error(`Fehler beim Laden der Kontakte: ${err.message}`);
+            return res.status(500).json({ error: "Fehler beim Laden der Kontakte." });
+        }
+        res.json(rows);
+    });
+});
 
 // Nachrichten abrufen (JETZT GESCHÜTZT UND KORREKT)
 app.get('/messages', verifyToken, (req, res) => { // NEU: Token-Prüfung hinzugefügt
@@ -401,6 +564,13 @@ app.get('/', (req, res) => {
     res.send('Willkommen auf dem SafeSpeak-Server! Die Datenbank ist eingerichtet.');
 });
 
+// Einmal pro Stunde alle abgelaufenen Accounts "reinigen"
+setInterval(() => {
+    const now = new Date().toISOString();
+    // Lösche Nachrichten und sensible Daten, aber behalte den User-Eintrag (ID, Name, Ort, is_blocked)
+    db.run(`UPDATE users SET password = 'DELETED', deletion_date = NULL WHERE is_blocked = 1 AND deletion_date <= ?`, [now]);
+    console.log("Bereinigung gesperrter Accounts durchgeführt.");
+}, 1000 * 60 * 60); // Alle 60 Minuten
 
 app.listen(port, () => {
     logger.info(`Server läuft auf Port ${port}`); // KORREKTUR: logger.info
