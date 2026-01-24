@@ -409,6 +409,14 @@ app.post('/login', loginLimiter, (req, res) => {
     });
 });
 
+    app.get('/contacts', verifyToken, (req, res) => {
+        // Sucht alle Nutzer außer dir selbst
+        const query = "SELECT id, username, location FROM users WHERE id != ?";
+        db.all(query, [req.user.id], (err, rows) => {
+            if (err) return res.status(500).json({ error: "Datenbankfehler" });
+            res.json(rows);
+        });
+    });
 
         app.post('/send', verifyToken, upload.single('file'), async (req, res) => {
             const { receiverUsername, content } = req.body;
