@@ -547,21 +547,10 @@ app.get('/download/:filePath', verifyToken, (req, res) => {
 });
 
 app.get('/contacts', verifyToken, (req, res) => {
-    // 1. Die PLZ des aktuell eingeloggten Nutzers finden
-    db.get("SELECT location FROM users WHERE id = ?", [req.user.id], (err, row) => {
-        if (err || !row || !row.location) {
-            return res.status(500).json({ error: "Standort nicht gefunden" });
-        }
-
-        // Wir extrahieren die PLZ (die ersten 5 Zeichen des Location-Strings)
-        const myZip = row.location.substring(0, 5);
-
-        // 2. Alle anderen Nutzer finden, deren Location mit derselben PLZ beginnt
-        const query = "SELECT id, username, location FROM users WHERE id != ? AND location LIKE ?";
-        db.all(query, [req.user.id, `${myZip}%`], (err, rows) => {
-            if (err) return res.status(500).json({ error: "Fehler bei der Suche" });
-            res.json(rows);
-        });
+    // Einfache Version: schickt alle Nutzer außer sich selbst
+    db.all("SELECT id, username, location FROM users WHERE id != ?", [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: "Datenbankfehler" });
+        res.json(rows);
     });
 });
 
