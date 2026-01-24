@@ -129,5 +129,27 @@ app.get('/messages', verifyToken, (req, res) => {
     });
 });
 
-// --- SERVER START ---
-server.listen(port, () => logger.info(`Server auf Port ${port}`));
+io.on('connection', (socket) => {
+    socket.on('join', (username) => {
+        socket.join(username);
+        console.log(`${username} ist dem Chat beigetreten`);
+    });
+
+    socket.on('private_message', ({ to, content, token }) => {
+        // Hier validiert der Server den Token und speichert in die DB
+        jwt.verify(token, JWT_SECRET, (err, decoded) => {
+            if (err) return;
+            const sender = decoded.username;
+            
+            // In DB speichern
+            db.run("INSERT INTO messages (sender_id, receiver_id, content) SELECT u1.id, u2.id, ? FROM users u1, users u2 WHERE u1.username = ? AND u2.username = ?", [content, sender, to]);
+            
+            // An Empfänger senden
+            io.to(to).emit('new_message', { sender, content });
+        });
+    });
+});
+
+server.listen(port, () => {
+    console.log(`Server läuft auf Port ${port}`);
+});
