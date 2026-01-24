@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "nsfwjs": "^4.2.1",
+    "socket.io": "^4.8.3",
     "sqlite3": "^5.1.7",
     "winston": "^3.18.3"
   }

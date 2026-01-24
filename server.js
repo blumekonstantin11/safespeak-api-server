@@ -81,7 +81,48 @@ const logger = winston.createLogger({
   exitOnError: false, 
 });
 
+const express = require('express');
+const http = require('http'); // Neu: HTTP-Modul laden
+const { Server } = require('socket.io'); // Neu: Socket.io laden
+
 const app = express();
+const server = http.createServer(app); // Den Express-Server in einen HTTP-Server "einwickeln"
+
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Erlaubt Zugriff von deinem Frontend
+        methods: ["GET", "POST"]
+    }
+});
+
+// Socket.io Logik: Wenn ein Nutzer online kommt
+io.on('connection', (socket) => {
+    console.log('Ein Nutzer ist verbunden:', socket.id);
+
+    // Nutzer einem "Raum" mit seinem Usernamen zuweisen
+    socket.on('join', (username) => {
+        socket.join(username);
+        console.log(`${username} ist bereit für Anrufe.`);
+    });
+
+    // Signal für einen Anruf weiterleiten
+    socket.on('call-user', (data) => {
+        // data enthält: { to: 'Empfänger', offer: 'Verbindungsdaten', from: 'Absender' }
+        io.to(data.to).emit('incoming-call', {
+            from: data.from,
+            offer: data.offer
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Nutzer getrennt');
+    });
+});
+
+// WICHTIG: Am Ende der Datei nicht mehr app.listen, sondern server.listen nutzen!
+server.listen(3000, () => {
+    console.log('Server läuft auf Port 3000 inkl. Socket.io');
+});
 const port = process.env.PORT || 3000;
 
 // MIDDLEWARE
