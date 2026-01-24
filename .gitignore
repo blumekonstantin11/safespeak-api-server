@@ -1,7 +1,1 @@
-# .gitignore
-
- node_modules/
-.env
-*.db
-*.log
-uploads/
+node_modules
