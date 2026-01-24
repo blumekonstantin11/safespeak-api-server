@@ -547,24 +547,21 @@ app.get('/download/:filePath', verifyToken, (req, res) => {
 });
 
 app.get('/contacts', verifyToken, (req, res) => {
-    const userId = req.user.userId;
-
-    // Findet Leute am selben Ort ODER Leute, mit denen man schon geschrieben hat
-    const sql = `
-        SELECT DISTINCT id, username, location FROM users 
-        WHERE id != ? AND (
-            (location IS NOT NULL AND location = (SELECT location FROM users WHERE id = ?))
-            OR id IN (SELECT receiver_id FROM messages WHERE sender_id = ?)
-            OR id IN (SELECT sender_id FROM messages WHERE receiver_id = ?)
-        )
-    `;
-
-    db.all(sql, [userId, userId, userId, userId], (err, rows) => {
-        if (err) {
-            logger.error(`Fehler beim Laden der Kontakte: ${err.message}`);
-            return res.status(500).json({ error: "Fehler beim Laden der Kontakte." });
+    // 1. Die PLZ des aktuell eingeloggten Nutzers finden
+    db.get("SELECT location FROM users WHERE id = ?", [req.user.id], (err, row) => {
+        if (err || !row || !row.location) {
+            return res.status(500).json({ error: "Standort nicht gefunden" });
         }
-        res.json(rows);
+
+        // Wir extrahieren die PLZ (die ersten 5 Zeichen des Location-Strings)
+        const myZip = row.location.substring(0, 5);
+
+        // 2. Alle anderen Nutzer finden, deren Location mit derselben PLZ beginnt
+        const query = "SELECT id, username, location FROM users WHERE id != ? AND location LIKE ?";
+        db.all(query, [req.user.id, `${myZip}%`], (err, rows) => {
+            if (err) return res.status(500).json({ error: "Fehler bei der Suche" });
+            res.json(rows);
+        });
     });
 });
 
