@@ -68,7 +68,7 @@ app.use('/uploads', express.static(uploadDir));
 // --- DB INITIALISIERUNG ---
 const db = new sqlite3v.Database('safespeak.db');
 db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, location TEXT, is_blocked INTEGER DEFAULT 0)`);
+    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, street TEXT, zip TEXT, city TEXT, location TEXT, is_blocked INTEGER DEFAULT 0, strikes INTEGER DEFAULT 0, deletion_date TEXT)`);
     db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER, receiver_id INTEGER, content TEXT, file_path TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
 });
 
@@ -86,14 +86,15 @@ function verifyToken(req, res, next) {
 // --- ROUTEN ---
 
 app.post('/register', async (req, res) => {
-    const { username, password, location } = req.body;
-    try {
-        const hashed = await bcrypt.hash(password, saltRounds);
-        db.run("INSERT INTO users (username, password, location) VALUES (?, ?, ?)", [username, hashed, location], function(err) {
-            if (err) return res.status(400).json({ error: "Name vergeben" });
-            res.json({ success: true });
-        });
-    } catch (e) { res.status(500).json({ error: "Fehler" }); }
+    const { username, password, street, zip, city } = req.body;
+    const location = `${street}, ${zip} ${city}`; // Für die Umkreissuche
+    const hashed = await bcrypt.hash(password, saltRounds);
+    
+    db.run("INSERT INTO users (username, password, street, zip, city, location) VALUES (?, ?, ?, ?, ?, ?)", 
+    [username, hashed, street, zip, city, location], function(err) {
+        if (err) return res.status(400).json({ error: "Username existiert bereits" });
+        res.json({ message: "Erfolg!", userId: this.lastID });
+    });
 });
 
 app.post('/login', (req, res) => {
