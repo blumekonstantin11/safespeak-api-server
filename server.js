@@ -130,6 +130,15 @@ app.get('/messages', verifyToken, (req, res) => {
     });
 });
 
+app.get('/search', authenticateToken, (req, res) => {
+    const query = req.query.q;
+    // Sucht Nutzer, deren Name mit der Anfrage beginnt (LIKE)
+    db.all("SELECT username FROM users WHERE username LIKE ? LIMIT 5", [query + '%'], (err, rows) => {
+        if (err) return res.status(500).json({ error: "Datenbankfehler" });
+        res.json(rows);
+    });
+});
+
 io.on('connection', (socket) => {
     socket.on('join', (username) => {
         socket.join(username);
