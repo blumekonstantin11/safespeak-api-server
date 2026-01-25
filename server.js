@@ -173,15 +173,33 @@ io.on('connection', (socket) => {
         jwt.verify(token, JWT_SECRET, (err, decoded) => {
             if (err) return;
             const sender = decoded.username;
-            db.run("INSERT INTO messages (sender_id, receiver_id, content) SELECT u1.id, u2.id, ? FROM users u1, users u2 WHERE u1.username = ? AND u2.username = ?", 
-            [content, sender, to], (dbErr) => {
-                if (!dbErr) {
-                    io.to(to).emit('new_message', { sender, content });
+
+            // FILTER LOGIK
+            const containsForbidden = forbiddenWords.some(word => 
+                content.toLowerCase().includes(word)
+            );
+
+            if (containsForbidden) {
+                socket.emit('error_message', { msg: "Deine Nachricht enthält blockierte Inhalte." });
+                logger.warn(`Blockierte Nachricht von ${sender}`);
+                return; 
+            }
+
+            // KORREKTES SQL STATEMENT
+            db.run(
+                "INSERT INTO messages (sender_id, receiver_id, content) SELECT u1.id, u2.id, ? FROM users u1, users u2 WHERE u1.username = ? AND u2.username = ?", 
+                [content, sender, to], 
+                (dbErr) => {
+                    if (!dbErr) {
+                        io.to(to).emit('new_message', { sender, content });
+                    } else {
+                        logger.error("Datenbankfehler beim Senden:", dbErr);
+                    }
                 }
-            });
-        });
-    });
-});
+            );
+        }); // Schließt jwt.verify
+    }); // Schließt socket.on('private_message')
+}); // HIER WAR DER FEHLER: Schließt io.on('connection')
 
 server.listen(port, () => {
     logger.info(`Server läuft auf Port ${port}`);
